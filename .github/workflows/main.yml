@@ -31,12 +31,14 @@ jobs:
           pip install mkdocs mkdocs-material
 
       - name: Build MkDocs site
-        run: mkdocs build --strict
+        run: |
+          cd rdma_tutorial
+          mkdocs build --strict
 
       - name: Upload artifact for GitHub Pages
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./site
+          path: ./rdma_tutorial/site
 
   deploy:
     needs: build
