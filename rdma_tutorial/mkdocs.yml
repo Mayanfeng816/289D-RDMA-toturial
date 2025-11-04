@@ -1,0 +1,23 @@
+site_name: RDMA Programming Tutorial
+site_description: A comprehensive guide to RDMA programming concepts and practices.
+site_author: RDMA Experts
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.instant
+
+nav:
+  - Homepage: index.md
+  - RDMA Basics:
+      - Introduction to RDMA: 0_introduction.md
+      - RDMA Verbs API: 1_rdma_verbs_api.md
+      - Memory Registration: 2_memory_registration.md
+      - Queue Pairs: 3_queue_pairs.md
+  - GPUDirect RDMA: 4_gpudirect_rdma.md
+  - Code Examples:
+      - RDMA Read/Write Example: code_examples/rdma_read_write.md
+      - RDMA Send/Receive Example: code_examples/rdma_send_receive.md
+      - UCCL optimizations: code_examples/uccl_optimizations.md
+  
+
