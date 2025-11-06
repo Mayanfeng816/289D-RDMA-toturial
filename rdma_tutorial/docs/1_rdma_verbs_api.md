@@ -29,6 +29,8 @@ This function is used to initialize libibverbs' support for fork before calling 
 | `void ibv_free_device_list(struct ibv_device **list);`        | **Frees the memory** allocated for the device list returned by `ibv_get_device_list()`. Does not affect the devices themselves. | `list`: The device list returned by `ibv_get_device_list()`.                                         | None (void).                                                                 | Free resources after enumerating devices.         |
 | `const char *ibv_get_device_name(struct ibv_device *device);` | Returns a **human-readable name** for the device (e.g., `"mlx5_0"`).                                                            | `device`: Pointer to an `ibv_device` structure.                                                      | Returns a static string; **do not free** it manually.                        | Display or log the device name.                   |
 | `uint64_t ibv_get_device_guid(struct ibv_device *device);`    | Returns the device’s **Globally Unique Identifier (GUID)** used to distinguish hardware adapters.                               | `device`: Pointer to an `ibv_device` structure.                                                      | Returns a 64-bit integer (GUID).                                             | Identify or differentiate between HCA devices.    |
+
+
 ### Context function
 
 | Function                                                          | Description                                                                                                                                                        | Parameters                                                      | Return Value                                                                  | Typical Usage                                         |
@@ -145,73 +147,4 @@ This function is used to initialize libibverbs' support for fork before calling 
 
 reference:https://blog.zhaw.ch/icclab/infiniband-an-introduction-simple-ib-verbs-program-with-rdma-write/
 
-```mermaid
-%%{init: {"theme": "neutral", "themeVariables": {
-  "primaryColor": "#f2f2f2",
-  "primaryTextColor": "#000000",
-  "primaryBorderColor": "#000000",
-  "lineColor": "#000000",
-  "fontSize": "15px",
-  "textColor": "#000000",
-  "noteTextColor": "#000000",
-  "noteBkgColor": "#e0e0e0",
-  "noteBorderColor": "#000000"
-}}}%%
-sequenceDiagram
-    participant S as Sender/Server
-    participant C as Receiver/Client
-
-    rect rgb(245,245,245)
-    Note over S,C: A) Initialize context & base resources
-    S->>S: ibv_get_device_list / ibv_open_device
-    S->>S:ibv_alloc_pd / ibv_reg_mr / create_cq / create_qp
-
-    C->>C: ibv_get_device_list / ibv_open_device
-    C->>C: ibv_alloc_pd / ibv_reg_mr / create_cq / create_qp
-    end
-
-    rect rgb(245,245,245)
-    Note over S,C: B) QP → INIT
-    S->>S: ibv_modify_qp (to INIT)
-    C->>C: ibv_modify_qp (to INIT)
-    end
-
-    rect rgb(245,245,245) 
-    Note over S,C: C) Prepare & exchange IB connection info (via TCP)
-    S->>S: ibv_query_port → fill local_info 
-    C->>C: ibv_query_port → fill local_info 
-    S-->>C: send local_info 
-    C-->>S: send local_info 
-    end
-
-    rect rgb(245,245,245)
-    Note over C: D) Receiver pre-post Recv
-    C->>C: ibv_post_recv()
-    end
-
-    rect rgb(245,245,245)
-    Note over S,C: E) QP → RTR
-    S->>S: ibv_modify_qp (to RTR)
-    C->>C: ibv_modify_qp (to RTR)
-    end
-
-    rect rgb(245,245,245)
-    Note over S,C: F) QP → RTS
-    S->>S: ibv_modify_qp (to RTS)
-    C->>C: ibv_modify_qp (to RTS)
-    end
-
-    rect rgb(245,245,245)
-    Note over S,C: G) Data path
-    S->>S: ibv_post_send (RDMA_WRITE / READ / SEND)
-    C->>C: ibv_poll_cq() or get_cq_event()+ack
-    C->>C: repost Recv if needed
-    end
-
-    rect rgb(245,245,245)
-    Note over S,C: H) Cleanup
-    S->>S: destroy_qp / cq / mr / pd / ctx
-    C->>C: destroy_qp / cq / mr / pd / ctx
-    end
-
-```
+![example](./images/api-example.png "example")
