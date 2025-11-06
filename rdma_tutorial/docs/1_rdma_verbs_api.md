@@ -13,6 +13,8 @@ To use the library, the code needs to include
     #include <infiniband/verbs.h>
 
 I will introduce every part of functions first, then I will show a example to the process of realizing RDMA.
+
+
 ### Libraray function
 In libibverbs, the use of **fork()**  is a rather risky operation because InfiniBand resources (such as queue pairs QP, completion queues CQ, protection domains PD, memory registrations MR, etc.) are usually directly managed by the kernel driver, and the states of these resources are closely associated with the process address space. Once a process calls fork(), these kernel resources will not be duplicated, but the user-space handles (such as struct ibv_context *) will be copied to the child process, leading to serious inconsistencies and potential crashes.
 
@@ -137,46 +139,7 @@ This function is used to initialize libibverbs' support for fork before calling 
 
 ### Resource creation dependency
 
-```mermaid
-graph LR
-    %% ====== 节点定义 ======
-    A(["**struct ibv_device**"])
-    B(["**struct ibv_context**"])
-    C(["**struct ibv_pd**"])
-    D(["**struct ibv_comp_channel**"])
-    E(["**struct ibv_mr**"])
-    F(["**struct ibv_ah**"])
-    G(["**struct ibv_srq**"])
-    H(["**struct ibv_cq**"])
-    I(["**struct ibv_qp**"])
-
-    %% ====== 主体结构 ======
-    A --> B
-    B --> C
-    B --> D
-    C --> E
-    C --> F
-    C --> G
-    C --> H
-    C --> I
-    D -.-> H
-    D -.-> I
-    G -.-> I
-    H --> I
-
-    %% ====== 图例 ======
-    subgraph legend ["Legend"]
-        style legend fill:#f9f9f9,stroke:#bbb,stroke-width:1px
-        L1["<b>→</b> Mandatory"]
-        L2["<b>⋯→</b> Optional"]
-    end
-
-    %% ====== 样式定义 ======
-    classDef nodeStyle fill:#eef2f6,stroke:#444,stroke-width:1px,color:#111,rx:6,ry:6;
-    classDef optLine stroke-dasharray:5 5,stroke:#666,color:#333;
-
-    class A,B,C,D,E,F,G,H,I nodeStyle;
-```
+![dependency](/images/api-dependency.png "dependency")
 ## Simple IB verbs RDMA program
 
 reference:https://blog.zhaw.ch/icclab/infiniband-an-introduction-simple-ib-verbs-program-with-rdma-write/
