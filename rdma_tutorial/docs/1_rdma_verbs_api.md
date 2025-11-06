@@ -139,7 +139,7 @@ This function is used to initialize libibverbs' support for fork before calling 
 
 ### Resource creation dependency
 
-![dependency](/images/api-dependency.png "dependency")
+![dependency](./images/api-dependency.png "dependency")
 ## Simple IB verbs RDMA program
 
 reference:https://blog.zhaw.ch/icclab/infiniband-an-introduction-simple-ib-verbs-program-with-rdma-write/
