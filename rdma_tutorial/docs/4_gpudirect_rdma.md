@@ -5,10 +5,9 @@
 
  Nowadays with specialized graphics card and NICs, we can directly support direct RDMA access from GPU to NICs. That technique is called *GPUDirect RDMA*.
 
- <figure>
-  <img src="images/GPUDirect_driver_model.png" alt="GPUDirect RDMA within the Linux Device Driver Model" width="80%">
-  <figcaption>GPUDirect RDMA within the Linux Device Driver Model</figcaption>
-</figure>
+![GPUDirect RDMA within the Linux Device Driver Model](images/GPUDirect_driver_model.png)
+
+<p align="center"><sub> GPUDirect RDMA within the Linux Device Driver Model</sub></p>
 
 ## Implementation details
 
