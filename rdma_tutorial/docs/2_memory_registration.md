@@ -6,11 +6,10 @@ As introduction said, **Memory Registration** is responsible for granting permis
 
 It enables:
 
-<!-- - Pinning the memory pages so they are not swapped or moved by the OS （If the operating system moves the memory to other location, the NIC will not be able to find it. In this case, the data will be likely read or written incorrectly, potentially causing errors.） -->
 - **Pinning the memory pages** so they are not swapped or moved by the OS. If the operating system moves the memory to another location, the NIC will not be able to find it. In this case, the data will likely be read or written incorrectly, potentially causing errors.
 
 - Installing virtual→physical address translations in the NIC
-- Returning access keys (`lkey`, `rkey`) so Work Requests (WRs) can reference the Memory Region (MR)
+- Returning access keys (`lkey`, `rkey`) so Work Requests can reference the Memory Region
 
 > Notice: Only registered memory can be used in RDMA operations!
 
