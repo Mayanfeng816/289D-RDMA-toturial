@@ -44,18 +44,32 @@ The implementation follows a **client–server model**:
 ---
 ## 2. RDMA Context
 
-All RDMA resources are grouped into a simple context structure containing:
+All RDMA resources are collected in a lightweight context struct:
+```c
+struct rdma_context {
+    struct ibv_context* ctx;
+    struct ibv_pd* pd;
+    struct ibv_cq_ex* cq_ex;
+    struct ibv_qp* qp;
+    struct ibv_mr* mr;
+    struct ibv_ah* ah;
+    char* local_buf;
+    uint32_t remote_rkey;
+    uint64_t remote_addr;
+};
+```
 
-* Device context
-* Protection domain
-* Extended completion queue
-* SRD QP
-* Memory region (host or GPU)
-* Address handle
-* Local/remote buffer information
+`init_rdma()` performs:
 
-`init_rdma()` handles device selection, CQ creation, MR registration, and QP creation.
-This prepares the RDMA environment used by both sides.
+* Selecting and opening an RDMA device
+
+* Allocating a protection domain
+
+* Creating an extended CQ (`ibv_cq_ex`)
+
+* Allocating and registering memory regions
+
+* Creating an SRD QP
 
 ---
 
@@ -75,7 +89,14 @@ A lightweight TCP connection (`exchange_qpns()`) is used to exchange this metada
 * Both sides send their metadata
 * TCP closes immediately after exchange
 
-This one-time handshake bootstraps the RDMA data path.
+```c
+struct metadata {
+    uint32_t qpn;
+    union ibv_gid gid;
+    uint32_t rkey;
+    uint64_t addr;
+};
+```
 
 ---
 
@@ -147,6 +168,11 @@ IBV_WC_RDMA_WRITE
 6. Wait for two RDMA writes from client
 7. Print the received buffer
 
+Example receive posting (simplified):
+```c
+ibv_recv_wr wr = { .num_sge = 1, .wr_id = 1 };
+ibv_post_recv(rdma->qp, &wr, &bad);
+```
 ---
 
 ## 8. Client Workflow
@@ -160,6 +186,9 @@ IBV_WC_RDMA_WRITE
 5. Issue two RDMA writes with immediate:
     * one full-size message
     * one small 8-byte message
+    ```c
+    ibv_wr_rdma_write_imm(wr, remote_rkey, remote_addr, imm_data);
+    ```
 6. Poll CQ for completion
 
 ---
