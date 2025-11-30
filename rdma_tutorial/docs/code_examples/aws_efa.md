@@ -8,7 +8,7 @@
 
 
 
-This page examplain the code of [efa_rdma_write.cc](https://github.com/uccl-project/uccl/blob/main/misc/efa_rdma_write.cc) about how to build a simple **RDMA Write with Immediate** pipeline using **Amazon EFA** and its **SRD QP** capability. Although the current testing environment does not support EFA, this document describes the functional behavior of the code.
+This page examplain the code of [efa_rdma_write.cc](https://github.com/uccl-project/uccl/blob/main/misc/efa_rdma_write.cc) about how to build a simple **RDMA Write with Immediate** pipeline using **Amazon EFA** and its **SRD QP** capability. 
 
 The code example of [efa_rdma_write.cc](https://github.com/uccl-project/uccl/blob/main/misc/efa_rdma_write.cc) shows:
 
@@ -41,8 +41,6 @@ The implementation follows a **client–server model**:
   * one large message
   * one small message
 * Polls CQ for completion
-
-All routing is handled through **SRD**, which uses UD-style addressing but provides reliable, ordered delivery similar to RC.
 
 ---
 
