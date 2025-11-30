@@ -34,15 +34,14 @@ The implementation follows a **client–server model**:
 
 ### **Client**
 
-* Exchanges metadata with the server
-* Creates an Address Handle (AH) with server’s GID
-* Performs two RDMA writes:
-    * one large message
-    * one small message
+* Exchanges metadata with the server  
+* Creates an Address Handle (AH) with server’s GID  
+* Performs two RDMA writes:  
+  - one large message  
+  - one small message  
 * Polls CQ for completion
 
 ---
-
 ## 2. RDMA Context
 
 All RDMA resources are grouped into a simple context structure containing:
