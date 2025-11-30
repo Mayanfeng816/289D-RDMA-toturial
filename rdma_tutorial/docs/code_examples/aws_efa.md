@@ -37,8 +37,8 @@ The implementation follows a **client–server model**:
 * Exchanges metadata with the server  
 * Creates an Address Handle (AH) with server’s GID  
 * Performs two RDMA writes:  
-  - one large message  
-  - one small message  
+    - one large message  
+    - one small message  
 * Polls CQ for completion
 
 ---
