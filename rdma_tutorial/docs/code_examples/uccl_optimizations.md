@@ -213,6 +213,12 @@ We know that the foundation of RDMA communication is the Queue Pair (QP), where 
     dec_post_srq(post_batch);
 </details>
 
+
+```
+source code
+```
+
+
 ### reference
 
 [-Savir; Zhihu Column; RDMA Shared Receive Queue ](https://cuterwrite.top/en/p/rdma-shared-receive-queue/#:~:text=RDMA%3A%20Shared%20Receive%20Queue%20,RQ%20is%20called%20an%20SRQ)
@@ -352,6 +358,67 @@ A Shared Completion Queue (SCQ) means multiple QP use the same CQ to report thei
     }
 </details>
 
+
+UCCL implements SCQ in its `rdma_io.h`. The `SharedIOContext` class encapsulates shared RDMA resources per engine (thread). When a `SharedIOContext` is created, it allocates one send CQ and one receive CQ and all data QPs will use these, realizing an SCQ.
+
+```
+support_cq_ex_ = RDMAFactory::get_factory_dev(dev)->support_cq_ex;
+...
+if (support_cq_ex_) {
+    send_cq_ex_ = util_rdma_create_cq_ex(context, kCQSize);
+    recv_cq_ex_ = util_rdma_create_cq_ex(context, kCQSize);
+} else {
+    send_cq_ex_ = (struct ibv_cq_ex*)util_rdma_create_cq(context, kCQSize);
+    recv_cq_ex_ = (struct ibv_cq_ex*)util_rdma_create_cq(context, kCQSize);
+}
+UCCL_INIT_CHECK(send_cq_ex_ != nullptr, "util_rdma_create_cq_ex failed");
+UCCL_INIT_CHECK(recv_cq_ex_ != nullptr, "util_rdma_create_cq_ex failed");
+```
+On constructing a SharedIOContext, UCCL queries if the device supports extended CQs `support_cq_ex_`. Extended CQs `ibv_create_cq_ex` allow grabbing extra info like opcode in one shot. 
+
+If supported, it creates an extended CQ for send and one for receive with capacity kCQSize. 
+
+If not, it falls back to normal CQs (casting them to `ibv_cq_ex*` pointers for a unified handling). 
+
+Thus, `send_cq_ex_` and `recv_cq_ex_` become the two shared completion queues, one for all send completions, one for all recv completions across QPs. Each is created with flags for single-threaded use and to capture useful fields like in `util_rdma_create_cq_ex` to ensure the CQEs contain the QP number, immediate data, byte length, etc. This is crucial for demultiplexing events. 
+
+
+Next, when data QPs are created, UCCL attaches the shared CQs to them. In `transport.cc`, the code uses the SharedIOContext’s CQs for each new QP:
+```
+qp_init_attr.send_cq = ibv_cq_ex_to_cq(io_ctx->send_cq_ex_);
+qp_init_attr.recv_cq = ibv_cq_ex_to_cq(io_ctx->recv_cq_ex_);
+...
+qp_init_attr.srq = io_ctx->srq_;
+qp_init_attr.qp_type = (rc_mode? IBV_QPT_RC : IBV_QPT_UC);
+...
+struct ibv_qp* qp = ibv_create_qp(pd_, &qp_init_attr);
+UCCL_INIT_CHECK(qp != nullptr, "ibv_create_qp failed for data path QP");
+dp_qps_[i].qp = qp;
+qpn2idx_.insert({qp->qp_num, i});
+io_ctx->record_qpn_ctx_mapping(qp->qp_num, this);
+
+```
+Here, `io_ctx->send_cq_ex_`and `recv_cq_ex_` are the shared CQs created earlier. The code passes them into `ibv_create_qp` for every data QP it creates.
+
+UCCL keeps track of QP-to-context mapping: after creating each QP, it inserts the QP number into a map `qpn2idx_` and a mapping via `record_qpn_ctx_mapping` that associates the QP number with the RDMAContext it belongs to.
+
+The class centralizes CQ polling entry points `poll_ctrl_cq`, `uc_poll_send_cq`, `uc_poll_recv_cq`, `rc_poll_send_cq`, `rc_poll_recv_cq`, which dispatch to extended or normal pollers based on the feature flag to minimize overhead when integrating with different RDMA transports.
+```
+int poll_ctrl_cq(void) {
+  return support_cq_ex_ ? _poll_ctrl_cq_ex() : _poll_ctrl_cq_normal();
+}
+...
+
+int _rc_poll_recv_cq_normal(void);
+int _rc_poll_recv_cq_ex(void);
+```
+> **Conclusion:**  
+>1. Benefits of SCQ: A shared completion queue greatly simplifies and speeds up completion handling when many QPs are in use. It reduces the number of CQs the CPU must poll, which in turn cuts down context switches or thread wake-ups and improves cache locality.
+>2. Trade-off: The main trade-off is complexity in software. The library must demultiplex events (but this is trivial via QP number) and ensure that the shared CQ is large enough to handle bursts from all QPs.
+
+
 ### reference
 
-[UCCL RDMA rdma_io.h ](https://github.com/uccl-project/uccl/blob/main/collective/rdma/rdma_io.h#L713)
+[UCCL RDMA rdma_io.h](https://github.com/uccl-project/uccl/blob/main/collective/rdma/rdma_io.h#L713)
+
+[UCCL RDMA transport.cc](https://github.com/uccl-project/uccl/blob/main/collective/rdma/transport.cc#L1919)
