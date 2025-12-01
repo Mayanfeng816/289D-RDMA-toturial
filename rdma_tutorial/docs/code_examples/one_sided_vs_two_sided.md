@@ -32,7 +32,7 @@ $ gcc bench_client.c -o bench_client -lrdmacm -libverbs
 - `--iters`: total operations to issue.
 - `--window`: outstanding WRs allowed in flight (match server `recv-depth` in SEND mode).
 
-### Test results
+### Test results (CPU RAM)
 
 We would like to explore the impact of message size on MOPS and bandwidth for one-side and two-side RDMA. 
 
@@ -91,10 +91,50 @@ Here's our results:
 
 ![](code/one_side_vs_two_side/plots_msg_sweep/msg_sweep_mops_w64.png)
 
-### Result analysis
+### Result analysis (CPU)
 
 As you can see in the resulted graphs, the message size would decrease MOPS but increase bandwidth.
 
 When the queue depth is small (4), increasing the message size would greatly increase the bandwitdh and that does not converge to mature. However,  when the depth gets larger(64), the bandwidth converges at message size $2^{12}$ (4096) bytes and further increase of message size would only decrease MOPS.
 
 The experiment also shows that we should use a sufficiently large queue depth, as it has a significant impact on RDMA performance. This is often overlooked in other tutorials, but a larger queue depth is essential to fully utilize the network’s capacity.
+
+### Test results (GPU RAM)
+This tutorial is mainly for GPU RDMA, so we also test the performance when using GPU memory.
+
+|experiment   |mode |msg  |window|iters |mops|gib  |
+|-------------|-----|-----|------|------|----|-----|
+|msg_sweep_gpu|write|32   |64    |200000|3.64|0.11 |
+|msg_sweep_gpu|send |32   |64    |200000|3.64|0.11 |
+|msg_sweep_gpu|write|64   |64    |200000|3.6 |0.21 |
+|msg_sweep_gpu|send |64   |64    |200000|3.63|0.22 |
+|msg_sweep_gpu|write|128  |64    |200000|3.61|0.43 |
+|msg_sweep_gpu|send |128  |64    |200000|3.65|0.44 |
+|msg_sweep_gpu|write|256  |64    |200000|3.6 |0.86 |
+|msg_sweep_gpu|send |256  |64    |200000|3.58|0.85 |
+|msg_sweep_gpu|write|512  |64    |200000|3.5 |1.67 |
+|msg_sweep_gpu|send |512  |64    |200000|3.59|1.71 |
+|msg_sweep_gpu|write|1024 |64    |200000|3.56|3.4  |
+|msg_sweep_gpu|send |1024 |64    |200000|3.56|3.4  |
+|msg_sweep_gpu|write|2048 |64    |200000|3.4 |6.48 |
+|msg_sweep_gpu|send |2048 |64    |200000|3.49|6.66 |
+|msg_sweep_gpu|write|4096 |64    |200000|2.59|9.89 |
+|msg_sweep_gpu|send |4096 |64    |200000|2.61|9.94 |
+|msg_sweep_gpu|write|8192 |64    |200000|1.32|10.06|
+|msg_sweep_gpu|send |8192 |64    |200000|1.33|10.12|
+|msg_sweep_gpu|write|65536|64    |200000|0.17|10.18|
+|msg_sweep_gpu|send |65536|64    |200000|0.17|10.19|
+
+
+![](code/one_side_vs_two_side/plots_gpu_msg_sweep/gpu_msg_sweep_gib_w64.png)
+
+![](code/one_side_vs_two_side/plots_gpu_msg_sweep/gpu_msg_sweep_mops_w64.png)
+
+### Result analysis (GPU)
+Similar performances exhibit in our GPU test. The throughput increase with message size but the effect eventually converges at $2^12$. We can then conclude that for our 
+
+### Conclusion 
+
+“Our experiments reveal an interesting finding: with a window size of 64, the `send` and `write` operations show no statistically significant performance difference when using a Mellanox ConnectX RoCE adapter operating at 100 Gb/s (theoretical peak 11.64 GiB/s).”
+
+Thus, we arrive at a somewhat counterintuitive conclusion that, under our experimental setup, one-sided and two-sided operations exhibit no observable performance difference.
