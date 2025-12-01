@@ -214,9 +214,93 @@ We know that the foundation of RDMA communication is the Queue Pair (QP), where 
 </details>
 
 
+SRQ Creation: When SharedIOContext is constructed, after creating the CQs, UCCL creates the SRQ and this SRQ is stored in `io_ctx->srq_`:
+
 ```
-source code
+srq_ = util_rdma_create_srq(pd, kMaxSRQ, 1, 0);
+UCCL_INIT_CHECK(srq_ != nullptr, "util_rdma_create_srq failed");
 ```
+This call uses UCCL’s wrapper to create an SRQ on the given protection domain.
+1. `kMaxSRQ`: the maximum number of outstanding receive work requests that the SRQ can hold. This is a constant defining the size of the shared RQ.
+
+2. `max_sge = 1`: each receive will have at most one scatter-gather element, UCCL posts single-buffer receives.
+
+3. `srq_limit = 0`: this is a threshold for generating an `IBV_EVENT_SRQ_LIMIT_REACHED` event when the number of available WQE falls below a certain value.
+
+Posting receive WRs to SRQ: UCCL pre-posts a number of receive buffers to the SRQ and maintains the pool. 
+```
+retr_mr_ = util_rdma_create_host_memory_mr(pd, kRetrChunkSize * RetrChunkBuffPool::kNumChunk);
+retr_hdr_mr_ = util_rdma_create_host_memory_mr(pd, RetrHdrBuffPool::kNumHdr * RetrHdrBuffPool::kHdrSize);
+retr_chunk_pool_.emplace(retr_mr_);
+retr_hdr_pool_.emplace(retr_hdr_mr_);
+...
+cq_desc_mr_ = util_rdma_create_host_memory_mr(pd, CQEDescPool::kNumDesc * CQEDescPool::kDescSize);
+cq_desc_pool_.emplace(cq_desc_mr_);
+  
+inc_post_srq(kMaxSRQ);
+while (get_post_srq_cnt() > 0) {
+    check_srq(true);
+}
+```
+UCCL allocates two memory regions: one for retransmission chunks and one for retransmission headers, then creates buffer pools out of them.
+
+For SRQ posting, the `retr_chunk_pool_` supplies memory for incoming data.
+
+Then, it calls `inc_post_srq(kMaxSRQ)` followed by a loop calling `check_srq(true)` until no more postings are pending.
+1. `inc_post_srq(n)` increments an internal counter of how many receives need posting.
+2. `check_srq(force=true)` call actually posts those receives in batches.
+
+
+The `check_srq(bool force)` function is defined in `rdma_io.cc` either does nothing (if not enough WQEs need posting yet) or, if `force==true` or the count exceeds a threshold, it will post a batch of WQEs to the SRQ:
+```
+void SharedIOContext::check_srq(bool force) {
+    auto n_post_srq = get_post_srq_cnt();
+
+    if (!force && n_post_srq < kPostRQThreshold) return;
+
+    int post_batch = std::min(kPostRQThreshold, (uint32_t)n_post_srq);
+    for (int i = 0; i < post_batch; i++) {
+        if (!is_rc_mode()) {
+            // For UC/UD mode:
+            auto chunk_addr = pop_retr_chunk();
+            dp_recv_wrs_.recv_sges[i].addr   = chunk_addr;
+            dp_recv_wrs_.recv_sges[i].length = kRetrChunkSize;
+            dp_recv_wrs_.recv_sges[i].lkey   = get_retr_chunk_lkey();
+            dp_recv_wrs_.recv_wrs[i].num_sge = 1;
+            dp_recv_wrs_.recv_wrs[i].sg_list = &dp_recv_wrs_.recv_sges[i];
+            dp_recv_wrs_.recv_wrs[i].next    = (i == post_batch-1 ? nullptr : &dp_recv_wrs_.recv_wrs[i+1]);
+            CQEDesc* cqe_desc = pop_cqe_desc();
+            cqe_desc->data = (uint64_t)chunk_addr;
+            dp_recv_wrs_.recv_wrs[i].wr_id = (uint64_t)cqe_desc;
+        } else {
+            // RC mode – use empty receives
+            dp_recv_wrs_.recv_wrs[i].num_sge = 0;
+            dp_recv_wrs_.recv_wrs[i].sg_list = nullptr;
+            dp_recv_wrs_.recv_wrs[i].next    = (i == post_batch-1 ? nullptr : &dp_recv_wrs_.recv_wrs[i+1]);
+            dp_recv_wrs_.recv_wrs[i].wr_id   = 0;
+        }
+    }
+    struct ibv_recv_wr* bad_wr;
+    CHECK(ibv_post_srq_recv(srq_, &dp_recv_wrs_.recv_wrs[0], &bad_wr) == 0);
+    dec_post_srq(post_batch);
+}
+
+```
+
+The loop has two cases:
+1. UC/UD mode (`!is_rc_mode()`): UCCL expects actual data to arrive in the receives.
+    1. It pops a buffer from the retransmission chunk pool: `pop_retr_chunk()` provides an available memory buffer address for an incoming data chunk.
+    2. It sets up an `ibv_sge` with that address, length and lkey
+    3. It fills in the `recv_wrs[i]` with 1 SGE, pointing to this sge, and links the WRE to the next one (except last) using the `next `pointer so they form a chain.
+    4. It also obtains a `CQEDesc` from a pooland stores the chunk buffer address in it, then uses the pointer to this descriptor as the `wr_id` for the WQE. The `wr_id` will be retrieved upon completion to identify the buffer.
+2. RC mode (`is_rc_mode() == true`): In reliable connection mode, UCCL is actually using RDMA Write with immediate for incoming data.The only thing that arrives via the receive queue is the immediate value signaling completion of the write.
+    1. For RC, UCCL posts a receive WQE with no SGE (`num_sge = 0`).This is essentially a placeholder just to catch the immediate. No data buffer is needed because the data isn’t delivered via the receive queue.
+    2. It sets `wr_id = 0` and chains them similarly via `next`.
+
+After constructing the list of WQEs, it calls `ibv_post_srq_recv(srq_, first_wr, &bad_wr)` to post the chain to the SRQ. The code then decreases the pending post counter by `post_batch`.This mechanism allows UCCL to efficiently manage receive buffers, adding more when some are consumed.
+
+> **Conclusion:**  
+>In UCCL’s GPU RDMA stack, the Shared Receive Queue is not just a verbs feature; it is the central receive buffer abstraction that lets many UC/UD QPs pull from a single pool of GPU-resident buffers. This design leverages RDMA to minimize CPU involvement, scales to hundreds of QPs per NIC.
 
 
 ### reference
