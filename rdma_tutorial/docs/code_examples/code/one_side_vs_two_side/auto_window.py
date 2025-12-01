@@ -24,7 +24,7 @@ PLOT_DIR = Path("plots")
 BASELINE_MSG = 8192
 BASELINE_ITERS = 100000
 
-SWEEP_MSG_LIST = [256, 512]
+SWEEP_MSG_LIST = [32, 64]
 SWEEP_WINDOWS = [1, 2, 4, 8, 16, 32, 64]
 SWEEP_ITERS = 200000
 
@@ -61,7 +61,8 @@ def run_client(mode: str, msg: int, iters: int, window: int):
         print("!! bench_client exited with non-zero code:", proc.returncode)
         print("stdout:\n", proc.stdout)
         print("stderr:\n", proc.stderr)
-        raise RuntimeError("bench_client failed")
+        # 返回 None，让上层决定怎么处理这个失败
+        return None
 
     print("client stdout:\n", proc.stdout.strip())
 
@@ -173,15 +174,30 @@ def run_sweep_experiments():
                     iters=SWEEP_ITERS,
                     window=win,
                 )
-                row = {
-                    "experiment": "sweep",
-                    "mode": mode,
-                    "msg": msg,
-                    "window": win,
-                    "iters": SWEEP_ITERS,
-                    "mops": data["mops"],
-                    "gib": data["gib"],
-                }
+                if data is None:
+                    # 这个组合跑挂了（比如 RNR retry exceeded）
+                    print(
+                        f"*** 组合失败: msg={msg}, window={win}, mode={mode}，记录为 NaN，继续下一组 ***"
+                    )
+                    row = {
+                        "experiment": "sweep",
+                        "mode": mode,
+                        "msg": msg,
+                        "window": win,
+                        "iters": SWEEP_ITERS,
+                        "mops": float("nan"),
+                        "gib": float("nan"),
+                    }
+                else:
+                    row = {
+                        "experiment": "sweep",
+                        "mode": mode,
+                        "msg": msg,
+                        "window": win,
+                        "iters": SWEEP_ITERS,
+                        "mops": data["mops"],
+                        "gib": data["gib"],
+                    }
                 results.append(row)
                 print(
                     f"Recorded: mode={mode}, msg={msg}, window={win}, "
