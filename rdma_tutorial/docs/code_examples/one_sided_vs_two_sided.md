@@ -43,6 +43,7 @@ We iterate on the message size from 32 to 8192 bytes.
 Also it is important to note that the queue depth (window) has a great impact on the results as they allow the number of operations in flight. We test both `window=4` and `window=64` to understand how the system would perform in a shallow or deep queue.
 
 Here's our results:
+
 |experiment|mode |msg |window|iters |mops|gib |
 |----------|-----|----|------|------|----|----|
 |msg_sweep |write|32  |4     |200000|0.43|0.01|
