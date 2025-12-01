@@ -105,6 +105,20 @@ int main(int argc, char **argv) {
   struct ibv_mr *mr = ibv_reg_mr(id->pd, buf, buf_len, access);
   if (!mr)
     die("reg_mr");
+  // For SEND mode, pre-post recv WRs *before* we accept the connection,
+  // so the RQ is ready when the client starts sending.
+  if (mode == MODE_SEND) {
+    struct ibv_recv_wr *bad;
+    for (int i = 0; i < recv_depth; ++i) {
+      struct ibv_sge s = {.addr = (uintptr_t)(buf + (size_t)i * msg),
+                          .length = (uint32_t)msg,
+                          .lkey = mr->lkey};
+      struct ibv_recv_wr wr = {
+          .wr_id = (uint64_t)i, .sg_list = &s, .num_sge = 1};
+      if (ibv_post_recv(id->qp, &wr, &bad))
+        die("post_recv");
+    }
+  }
 
   struct Info info = {(uint64_t)buf, mr->rkey, (uint32_t)msg};
   struct rdma_conn_param p = {0};
@@ -122,16 +136,7 @@ int main(int argc, char **argv) {
   rdma_ack_cm_event(e);
 
   if (mode == MODE_SEND) {
-    struct ibv_recv_wr *bad;
-    for (int i = 0; i < recv_depth; ++i) {
-      struct ibv_sge s = {.addr = (uintptr_t)(buf + i * msg),
-                          .length = (uint32_t)msg,
-                          .lkey = mr->lkey};
-      struct ibv_recv_wr wr = {
-          .wr_id = (uint64_t)i, .sg_list = &s, .num_sge = 1};
-      if (ibv_post_recv(id->qp, &wr, &bad))
-        die("post_recv");
-    }
+    struct ibv_recv_wr *bad; // 这里只用于后面的 repost
 
     uint64_t done = 0;
     struct ibv_wc wc[32];
@@ -146,7 +151,7 @@ int main(int argc, char **argv) {
           die("wc");
         done++;
         int slot = (int)wc[i].wr_id;
-        struct ibv_sge s = {.addr = (uintptr_t)(buf + slot * msg),
+        struct ibv_sge s = {.addr = (uintptr_t)(buf + (size_t)slot * msg),
                             .length = (uint32_t)msg,
                             .lkey = mr->lkey};
         struct ibv_recv_wr wr = {
