@@ -1,1 +1,0 @@
-# RDMA Send/Receive Example

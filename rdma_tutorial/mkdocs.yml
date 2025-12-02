@@ -1,6 +1,9 @@
 site_name: RDMA Programming Tutorial
 site_description: A comprehensive guide to RDMA programming concepts and practices.
 site_author: RDMA Experts
+markdown_extensions:
+  - pymdownx.snippets
+  - pymdownx.superfences
 theme:
   name: material
   features:
@@ -17,7 +20,6 @@ nav:
   - GPUDirect RDMA: 4_gpudirect_rdma.md
   - Code Examples:
       - RDMA Read/Write Example: code_examples/rdma_read_write.md
-      - RDMA Send/Receive Example: code_examples/rdma_send_receive.md
       - One-sided vs Two-sided Test: code_examples/one_sided_vs_two_sided.md
       - RC vs UC Test: code_examples/rc_vs_uc_.md
       - UCCL optimizations: code_examples/uccl_optimizations.md
