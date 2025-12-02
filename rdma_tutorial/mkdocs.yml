@@ -32,6 +32,7 @@ markdown_extensions:
   - pymdownx.snippets:
       base_path: !relative
   - pymdownx.superfences
-      
+extra_css:
+  - extra.css      
   
 
