@@ -3,7 +3,7 @@
 ## Chained post
 UCCL pre-allocates a `wr_ex` pool for each RDMAContext, with each chunk corresponding to one `wr_ex` and links multiple work requests into a chain using `wr->next`. When sending data and ACKs, only one  `ibv_post_send` is used to send the entire chain to the NIC. This approach reduces the number of doorbell calls and the initialization/allocation overhead of each WR. Combined with TXTracking, it reuses the original `wr_ex` during retransmission, significantly reducing CPU overhead and improving NIC utilization.
 
-Then I will explain in detail in combination with the source code in `transport.h`.
+Then I will explain in detail, in combination with the source code in `transport.h`.
 
 ### WrExBuffPool
 ```
@@ -30,14 +30,13 @@ public:
   ~WrExBuffPool() = default;
 };
 ```
-WrExBuffPool is for work request extension. Every `wr_ex` include the work request `wr` and Scatter-Gather Element `sge`. The constructor function initialize each `wr` in the `wr_ex` by default inheriting the original data and for each `wr`, only one  `sge` needs to be done, and store them in a chain-like form.
+WrExBuffPool is for work request extension. Every `wr_ex` includes the work request `wr` and Scatter-Gather Element `sge`. The constructor function initializes each `wr` in the `wr_ex` by default, inheriting the original data, and for each `wr`, only one  `sge` needs to be done, and stores them in a chain-like form.
 
 In class `RDMAContext`, it has a optional WrExBuffPool. In this way, when sending data, no malloc WQE is performed. Instead, a batch of already initialized `wr_ex` is taken from `wr_ex_pool_`and used. Then, the data is organized for batch transmission by modifying sge/imm_data/next.
  ```
  // Buffer pool for work request extension items.
 std::optional<WrExBuffPool> wr_ex_pool_;
  ```
-
  ### TXTracking
 ```
 class TXTracking {
@@ -58,20 +57,20 @@ class TXTracking {
 }
 
 ```
-Each chunk corresponds to a `wr_ex`, facilitating retransmission and statistics.The `unacked_chunks_` stores all the `wr_ex` that have not been acknowledged, and it is used for Measure the round-trip time (RTT), packet loss, and queue delay, and during retransmission, you can simply retrieve the original `wr_ex` and resend it (participating in the chained post process again in `RDMAContext::try_retransmit_chunk`)
+Each chunk corresponds to a `wr_ex`, facilitating retransmission and statistics. The `unacked_chunks_` stores all the `wr_ex` that have not been acknowledged, and it is used for Measure the round-trip time (RTT), packet loss, and queue delay, and during retransmission, you can simply retrieve the original `wr_ex` and resend it (participating in the chained post process again in `RDMAContext::try_retransmit_chunk`)
 
 
 > **Conclusion:**  
->1. By using chain post, many chunks only needs a doorbell like realiazation `ibv_post_send(qpw.qp, wr, &bad)` in `transport.cc`, which can reduce kernel interaction.
->2. The `WrExBuffPool` can help pre-initialization to reduce the per-WR overhead
->3. By `TXTracking`, it use `wr_ex` and retransmission can also continue to use chained post
+>1. By using chain post, many chunks only need a doorbell-like realization `ibv_post_send(qpw.qp, wr, &bad)` in `transport.cc`, which can reduce kernel interaction.
+>2. The `WrExBuffPool` can help pwith re-initialization to reduce the per-WR overhead
+>3. By `TXTracking`, it uses `wr_ex` and retransmission can also continue to use chained post
 
 
 ## Scatter gather list
 The system separately allocates memory pools for retransmission chunks and retransmission headers. When constructing WQE, the `retr_chunk_hdr` and the original chunk data  are attached to the same `sg_list` of the WQE using the `ibv_sge` array. One doorbell is issued by the NIC to "gather" the complete message from multiple scattered addresses. This not only avoids the memory copy of the header and data, but also ensures that the control information and data are atomically delivered in a single operation. At the same time, in combination with the chained post at the upper layer, multiple WQE with SGLs are connected in series and submitted together, significantly reducing CPU overhead and the number of NIC doorbell requests.
 
 
-Then I will explain in detail in combination with the source code in `rdma_io.h` and `transport.h`.
+Then I will explain in detail, in combination with the source code in `rdma_io.h` and `transport.h`.
 ```
 struct __attribute__((packed)) retr_chunk_hdr {
   // Target address for the lost chunk.
@@ -103,16 +102,16 @@ class RetrHdrBuffPool : public BuffPool {
 };
 
 ```
-This is to retransmit the designed header and  chunk buffer pool. when sending retransmission, it uses a WQE + multiple SGEs in the scatter-gather method.
+This is to retransmit the designed header and  chunk buffer pool. When sending a retransmission, it uses a WQE + multiple SGEs in the scatter-gather method.
 
-Two parts of data are required for retransmission: 
+Two parts of the data are required for retransmission: 
 
-1.A very small retransmission header `retr_chunk_hdr` (12 bytes), which contains: `remote_addr`: Lost chunk - The destination address to be written back on the opposite end；
+1. A very small retransmission header `retr_chunk_hdr` (12 bytes), which contains: `remote_addr`: Lost chunk - The destination address to be written back on the opposite end；
 `imm_data`: The original immediate data for the write operation (including FID/RID/CSN, etc.) 
 
-2.A complete original chunk of data
+2. A complete original chunk of data
 
-In class `RDMAContext`,there is a corresponding code.
+In the class `RDMAContext `, there is a corresponding code.
 ```
 // Buffer pool for retransmission chunks.
 std::optional<RetrChunkBuffPool> retr_chunk_pool_;
