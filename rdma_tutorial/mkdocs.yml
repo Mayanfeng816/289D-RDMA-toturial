@@ -18,7 +18,8 @@ nav:
   - Code Examples:
       - RDMA Read/Write Example: code_examples/rdma_read_write.md
       - One-sided vs Two-sided Test: code_examples/one_sided_vs_two_sided.md
-      - RC vs UC Test: code_examples/rc_vs_uc_.md
+      - RC vs UD Test: code_examples/rc_vs_ud_.md
+      - RW GPU Steps: code_examples/code/RW_gpu/steps.md
       - UCCL optimizations: code_examples/uccl_optimizations.md
       - AWS EFA: code_examples/aws_efa.md
 
