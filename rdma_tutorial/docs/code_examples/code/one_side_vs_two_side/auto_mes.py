@@ -6,29 +6,25 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 
-# ================== 配置区 ==================
-
-# 改成你的 server IP
+# Set to your server IP
 SERVER_IP = "144.202.54.39"
 PORT = 9000
 
-# 可执行文件路径（相对脚本位置或绝对路径）
+# Executable paths (relative to script or absolute)
 BENCH_CLIENT = "./bench_client"
 BENCH_SERVER = "./bench_server"
 
-# 结果输出（用一个新的文件，避免和之前混在一起）
+# Output files (use a new one to avoid mixing with previous runs)
 RESULT_CSV = "rdma_msg_sweep_test.csv"
 PLOT_DIR = Path("plots_msg_sweep_test")
 
-# 实验参数
-FIXED_WINDOW = 4  # 固定 window
-ITERS = 200000  # 每组实验的迭代次数
+# Experiment parameters
+FIXED_WINDOW = 4  # fixed window
+ITERS = 200000  # iterations per experiment
 MSG_LIST = [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]
 
-MODES = ["write", "send"]  # 测这两个模式
+MODES = ["write", "send"]  # test these modes
 
-
-# ================== 工具函数 ==================
 
 CLIENT_LINE_RE = re.compile(
     r"\[client\]\s+(\w+)\s+done:\s+([0-9.]+)\s+Mops,\s+([0-9.]+)\s+GiB/s"
@@ -36,8 +32,8 @@ CLIENT_LINE_RE = re.compile(
 
 
 def run_client(mode: str, msg: int, iters: int, window: int):
-    """运行 bench_client 并解析 Mops / GiB/s。
-    如果 bench_client 返回非 0，则返回 None。
+    """Run bench_client and parse Mops / GiB/s.
+    If bench_client returns non-zero, return None.
     """
     cmd = [
         BENCH_CLIENT,
@@ -60,12 +56,12 @@ def run_client(mode: str, msg: int, iters: int, window: int):
         print("!! bench_client exited with non-zero code:", proc.returncode)
         print("stdout:\n", proc.stdout)
         print("stderr:\n", proc.stderr)
-        # 比如 RNR retry exceeded 之类的错误，返回 None 让上层记录 NaN
+        # For errors like RNR retry exceeded; return None so caller records NaN
         return None
 
     print("client stdout:\n", proc.stdout.strip())
 
-    # 找最后一行 [client] ... done
+    # Find the last line with [client] ... done
     m = None
     for line in proc.stdout.splitlines()[::-1]:
         m = CLIENT_LINE_RE.search(line)
@@ -84,7 +80,7 @@ def run_client(mode: str, msg: int, iters: int, window: int):
 
 
 def ask_start_server(mode: str, msg: int, iters: int):
-    """提示你在 server 上启动 bench_server, 并等待回车。"""
+    """Prompt to start bench_server on the server, then wait for Enter."""
     if mode == "send":
         srv_cmd = f"{BENCH_SERVER} {PORT} --mode send --msg {msg} --iters {iters} --recv-depth {max(256, FIXED_WINDOW*4)}"
     elif mode in ("write", "read"):
@@ -93,14 +89,14 @@ def ask_start_server(mode: str, msg: int, iters: int):
         raise ValueError(f"Unknown mode: {mode}")
 
     print("\n========================================")
-    print(f"在 SERVER 机器上运行（手动）:")
+    print(f"Run on SERVER host (manual):")
     print(f"  {srv_cmd}")
-    print("确认 server 已经启动后, 在本窗口按回车继续...")
+    print("After the server is up, press Enter here to continue...")
     input("Press ENTER to run client...")
 
 
 def append_result_csv(rows):
-    """把结果追加写入 CSV 文件。第一次写会加表头。"""
+    """Append results to the CSV file. First write adds the header."""
     file_exists = Path(RESULT_CSV).exists()
     fieldnames = [
         "experiment",
@@ -119,12 +115,11 @@ def append_result_csv(rows):
             writer.writerow(r)
 
 
-# ================== 实验：固定 window, 扫 msg ==================
-
-
 def run_msg_sweep():
-    """固定 window, 扫 message size。"""
-    print(f"\n\n===== 固定 window={FIXED_WINDOW}, 扫 message size (write & send) =====")
+    """Sweep message size with a fixed window."""
+    print(
+        f"\n\n===== Fixed window={FIXED_WINDOW}, sweep message size (write & send) ====="
+    )
     results = []
 
     for msg in MSG_LIST:
@@ -139,9 +134,9 @@ def run_msg_sweep():
             )
 
             if data is None:
-                # 某个组合失败，比如 RNR retry exceeded
+                # If a combination fails, e.g., RNR retry exceeded
                 print(
-                    f"*** 组合失败: msg={msg}, window={FIXED_WINDOW}, mode={mode}，记录为 NaN，继续下一组 ***"
+                    f"*** Combination failed: msg={msg}, window={FIXED_WINDOW}, mode={mode}; recorded as NaN, continue to next ***"
                 )
                 row = {
                     "experiment": "msg_sweep",
@@ -170,10 +165,7 @@ def run_msg_sweep():
             )
 
     append_result_csv(results)
-    print("\nMsg sweep 实验完成, 结果已写入", RESULT_CSV)
-
-
-# ================== 画图 ==================
+    print("\nMsg sweep finished, results written to", RESULT_CSV)
 
 
 def load_results():
@@ -191,7 +183,7 @@ def plot_results():
 
     sweep = df[(df["experiment"] == "msg_sweep")]
     if sweep.empty:
-        print("没有 msg_sweep 实验数据，先跑实验再画图。")
+        print("No msg_sweep data; run the experiment before plotting.")
         return
 
     # GiB/s vs msg
@@ -204,7 +196,7 @@ def plot_results():
     plt.xlabel("Message size (bytes)")
     plt.ylabel("Throughput (GiB/s)")
     plt.title(f"Throughput vs message size (window={FIXED_WINDOW})")
-    plt.xscale("log", base=2)  # 消息大小差距大，用 log2 x 轴更清晰
+    plt.xscale("log", base=2)  # Wide message size range; log2 x-axis is clearer
     plt.legend()
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.tight_layout()
@@ -228,25 +220,22 @@ def plot_results():
     plt.savefig(PLOT_DIR / f"msg_sweep_mops_w{FIXED_WINDOW}.png", dpi=200)
     plt.close()
 
-    print(f"\n画图完成, 图片保存在目录: {PLOT_DIR.resolve()}")
-
-
-# ================== main ==================
+    print(f"\nPlotting finished, images saved to: {PLOT_DIR.resolve()}")
 
 
 def main():
-    print("本脚本假设:")
-    print(f"  client 上可以直接运行: {BENCH_CLIENT}")
-    print(f"  server 上可以直接运行: {BENCH_SERVER}")
+    print("This script assumes:")
+    print(f"  Client can directly run: {BENCH_CLIENT}")
+    print(f"  Server can directly run: {BENCH_SERVER}")
     print(f"  server IP = {SERVER_IP}, port = {PORT}")
-    print(f"  固定 window = {FIXED_WINDOW}")
-    print("\n操作选项:")
+    print(f"  Fixed window = {FIXED_WINDOW}")
+    print("\nActions:")
 
     while True:
-        print("\n请选择操作:")
-        print("  1) 运行 固定 window 的 msg sweep 实验")
-        print("  2) 只画图（使用已有 CSV)")
-        print("  q) 退出")
+        print("\nChoose an action:")
+        print("  1) Run msg sweep with fixed window")
+        print("  2) Plot only (use existing CSV)")
+        print("  q) Quit")
         choice = input("> ").strip().lower()
         if choice == "1":
             run_msg_sweep()
@@ -255,7 +244,7 @@ def main():
         elif choice == "q":
             break
         else:
-            print("无效输入, 请重新选择。")
+            print("Invalid input, please choose again.")
 
 
 if __name__ == "__main__":

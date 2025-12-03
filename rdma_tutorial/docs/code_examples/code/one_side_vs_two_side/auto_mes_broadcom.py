@@ -5,33 +5,34 @@ import csv
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-# Configs
-
-SERVER_IP = "144.202.54.39"
+SERVER_IP = "fd93:16d3:59b6:12e:7ec2:55ff:febd:dc76"
 PORT = 9000
 
-BENCH_CLIENT = "./bench_client_gpu_op"
-BENCH_SERVER = "./bench_server_gpu"
+BENCH_CLIENT = "./bench_client_broadcom"
+BENCH_SERVER = "./bench_server_broadcom"
 
-# GPU ID
-GPU_ID = 0
+RESULT_CSV = "rdma_msg_sweep_test_broadcom_2.csv"
+PLOT_DIR = Path("plots_msg_sweep_test_broadcom_2")
 
-# Output dir
-RESULT_CSV = "rdma_gpu_msg_sweep_op.csv"
-PLOT_DIR = Path("plots_gpu_msg_sweep_op")
-
-# parameters
-FIXED_WINDOW = 64
+FIXED_WINDOW = 512
 ITERS = 200000
-MSG_LIST = [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 65536]
+MSG_LIST = [
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192,
+    16384,
+    32768,
+    65536,
+    131072,
+]
 
-# modes to test
 MODES = ["write", "send"]
 
-
-# [client] GPU write done: 0.43 Mops, 0.01 GiB/s (msg=32 bytes, window=64, gpu=0)
 CLIENT_LINE_RE = re.compile(
-    r"\[client\]\s+(?:GPU\s+)?(\w+)\s+done:\s+([0-9.]+)\s+Mops,\s+([0-9.]+)\s+GiB/s"
+    r"\[client\]\s+(\w+)\s+done:\s+([0-9.]+)\s+Mops,\s+([0-9.]+)\s+GiB/s"
 )
 
 
@@ -48,15 +49,13 @@ def run_client(mode: str, msg: int, iters: int, window: int):
         str(iters),
         "--window",
         str(window),
-        "--gpu",
-        str(GPU_ID),
     ]
     print("\n=== Running client ===")
     print(" ".join(cmd))
 
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
-        print("!! bench_client_gpu exited with non-zero code:", proc.returncode)
+        print("!! bench_client exited with non-zero code:", proc.returncode)
         print("stdout:\n", proc.stdout)
         print("stderr:\n", proc.stderr)
         return None
@@ -83,25 +82,18 @@ def run_client(mode: str, msg: int, iters: int, window: int):
 def ask_start_server(mode: str, msg: int, iters: int):
     if mode == "send":
         srv_cmd = (
-            f"{BENCH_SERVER} {PORT} "
-            f"--mode send --msg {msg} --iters {iters} "
-            f"--recv-depth {max(256, FIXED_WINDOW * 4)} "
-            f"--gpu {GPU_ID}"
+            f"{BENCH_SERVER} {PORT} --mode send --msg {msg} "
+            f"--iters {iters} --recv-depth {max(256, FIXED_WINDOW * 4)}"
         )
     elif mode in ("write", "read"):
-        # read/write modes do not need pre-posted recv WRs; server only provides RDMA buffers
-        srv_cmd = (
-            f"{BENCH_SERVER} {PORT} "
-            f"--mode {mode} --msg {msg} --iters {iters} "
-            f"--gpu {GPU_ID}"
-        )
+        srv_cmd = f"{BENCH_SERVER} {PORT} --mode {mode} --msg {msg} --iters {iters}"
     else:
         raise ValueError(f"Unknown mode: {mode}")
 
     print("\n========================================")
-    print(f"Run on SERVER host (manual):")
+    print("On the SERVER machine run:")
     print(f"  {srv_cmd}")
-    print("After the server is up, press Enter here to continue...")
+    print("After the server is ready, press ENTER here to start the client...")
     input("Press ENTER to run client...")
 
 
@@ -125,8 +117,9 @@ def append_result_csv(rows):
 
 
 def run_msg_sweep():
-    """Sweep message size with a fixed window."""
-    print(f"\n\n===== Fixed window={FIXED_WINDOW}, sweep message size (GPU, {MODES}) =====")
+    print(
+        f"\n\n===== Fixed window={FIXED_WINDOW}, sweeping message size (write & send) ====="
+    )
     results = []
 
     for msg in MSG_LIST:
@@ -141,12 +134,12 @@ def run_msg_sweep():
             )
 
             if data is None:
-                # If a combination fails, e.g., RNR retry exceeded
                 print(
-                    f"*** Combination failed: msg={msg}, window={FIXED_WINDOW}, mode={mode}, recorded as NaN; continue to next ***"
+                    f"*** Combination failed: msg={msg}, window={FIXED_WINDOW}, "
+                    f"mode={mode}, recording NaN and continuing ***"
                 )
                 row = {
-                    "experiment": "msg_sweep_gpu",
+                    "experiment": "msg_sweep",
                     "mode": mode,
                     "msg": msg,
                     "window": FIXED_WINDOW,
@@ -156,7 +149,7 @@ def run_msg_sweep():
                 }
             else:
                 row = {
-                    "experiment": "msg_sweep_gpu",
+                    "experiment": "msg_sweep",
                     "mode": mode,
                     "msg": msg,
                     "window": FIXED_WINDOW,
@@ -183,17 +176,16 @@ def load_results():
 
 
 def plot_results():
-    import pandas as pd  # Importing again is fine
+    import pandas as pd
 
     PLOT_DIR.mkdir(exist_ok=True)
     df = load_results()
 
-    sweep = df[(df["experiment"] == "msg_sweep_gpu")]
+    sweep = df[(df["experiment"] == "msg_sweep")]
     if sweep.empty:
-        print("No msg_sweep_gpu data; run the experiment before plotting.")
+        print("No msg_sweep data found. Run experiments before plotting.")
         return
 
-    # GiB/s vs msg
     plt.figure()
     for mode in MODES:
         s = sweep[sweep["mode"] == mode].sort_values("msg")
@@ -202,15 +194,14 @@ def plot_results():
         plt.plot(s["msg"], s["gib"], marker="o", label=f"{mode}")
     plt.xlabel("Message size (bytes)")
     plt.ylabel("Throughput (GiB/s)")
-    plt.title(f"[GPU] Throughput vs message size (window={FIXED_WINDOW})")
+    plt.title(f"Throughput vs message size (window={FIXED_WINDOW})")
     plt.xscale("log", base=2)
     plt.legend()
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.tight_layout()
-    plt.savefig(PLOT_DIR / f"gpu_msg_sweep_gib_w{FIXED_WINDOW}.png", dpi=200)
+    plt.savefig(PLOT_DIR / f"msg_sweep_gib_w{FIXED_WINDOW}.png", dpi=200)
     plt.close()
 
-    # Mops vs msg
     plt.figure()
     for mode in MODES:
         s = sweep[sweep["mode"] == mode].sort_values("msg")
@@ -219,34 +210,29 @@ def plot_results():
         plt.plot(s["msg"], s["mops"], marker="o", label=f"{mode}")
     plt.xlabel("Message size (bytes)")
     plt.ylabel("Operations (Mops)")
-    plt.title(f"[GPU] Ops vs message size (window={FIXED_WINDOW})")
+    plt.title(f"Ops vs message size (window={FIXED_WINDOW})")
     plt.xscale("log", base=2)
     plt.legend()
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.tight_layout()
-    plt.savefig(PLOT_DIR / f"gpu_msg_sweep_mops_w{FIXED_WINDOW}.png", dpi=200)
+    plt.savefig(PLOT_DIR / f"msg_sweep_mops_w{FIXED_WINDOW}.png", dpi=200)
     plt.close()
 
-    print(f"\nPlotting finished, images saved to: {PLOT_DIR.resolve()}")
-
-
-# ================== main ==================
+    print(f"\nPlots saved to: {PLOT_DIR.resolve()}")
 
 
 def main():
     print("This script assumes:")
-    print(f"  Client can directly run: {BENCH_CLIENT}")
-    print(f"  Server can directly run: {BENCH_SERVER}")
-    print(f"  server IP = {SERVER_IP}, port = {PORT}")
+    print(f"  Client can run: {BENCH_CLIENT}")
+    print(f"  Server can run: {BENCH_SERVER}")
+    print(f"  Server IP = {SERVER_IP}, port = {PORT}")
     print(f"  Fixed window = {FIXED_WINDOW}")
-    print(f"  GPU_ID = {GPU_ID}")
-    print(f"  Modes = {MODES}")
-    print("\nActions:")
+    print("\nMenu:")
 
     while True:
-        print("\nChoose an action:")
-        print("  1) Run GPU msg sweep with fixed window")
-        print("  2) Plot only (use existing CSV)")
+        print("\nSelect an option:")
+        print("  1) Run msg sweep experiment (fixed window)")
+        print("  2) Plot using existing CSV")
         print("  q) Quit")
         choice = input("> ").strip().lower()
         if choice == "1":
@@ -256,7 +242,7 @@ def main():
         elif choice == "q":
             break
         else:
-            print("Invalid input, please choose again.")
+            print("Invalid input, please try again.")
 
 
 if __name__ == "__main__":
