@@ -16,10 +16,12 @@ nav:
       - Queue Pairs: 3_queue_pairs.md
   - GPUDirect RDMA: 4_gpudirect_rdma.md
   - Code Examples:
-      - RDMA Read/Write Example: code_examples/rdma_read_write.md
+      - RDMA Write Example: code_examples/rdma_write.md
+      - RDMA Read Example: code_examples/rdma_read.md
+      - RDMA Write Example (GPU): code_examples/rdma_write_gpu.md
+      - RDMA Read Example (GPU): code_examples/rdma_read_gpu.md
       - One-sided vs Two-sided Test: code_examples/one_sided_vs_two_sided.md
       - RC vs UD Test: code_examples/rc_vs_ud_.md
-      - RW GPU Steps: code_examples/code/RW_gpu/steps.md
       - UCCL optimizations: code_examples/uccl_optimizations.md
       - AWS EFA: code_examples/aws_efa.md
 
