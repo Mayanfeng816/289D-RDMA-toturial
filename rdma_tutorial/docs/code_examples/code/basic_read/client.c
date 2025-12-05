@@ -1,4 +1,3 @@
-// gcc client.c -o client -lrdmacm -libverbs
 #include <rdma/rdma_cma.h>
 #include <infiniband/verbs.h>
 #include <stdio.h>

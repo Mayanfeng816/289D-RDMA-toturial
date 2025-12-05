@@ -5,8 +5,6 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-
-// HIP (ROCm)
 #include <hip/hip_runtime.h>
 
 struct Info {

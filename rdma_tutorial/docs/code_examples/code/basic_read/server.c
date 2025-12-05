@@ -1,4 +1,3 @@
-// gcc server.c -o server -lrdmacm -libverbs
 #include <arpa/inet.h>
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
